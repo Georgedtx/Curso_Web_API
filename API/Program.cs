@@ -1,11 +1,23 @@
 using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
-var app = builder.Build();
+builder.Services.AddSqlServer<ApplicationDbContext>(builder.Configuration["Database:SqlServer"]);
 
-app.MapPost("/products", (Product product) => {
-    ProductRepository.Add(product);
-    return Results.Created($"/products {product.Code}", product.Code);
+var app = builder.Build();
+var configuration = app.Configuration;
+ProductRepository.Init(configuration);
+
+app.MapPost("/products", (ProductRequest productRequest, ApplicationDbContext context) => {
+    var category = context.Categories.Where(c => c.Id == productRequest.CategoryId).First();
+    var product = new Product{
+        Code = productRequest.code,
+        Name = productRequest.name,
+        Description = productRequest.Description,
+        Category = category
+    };
+    context.Products.Add(product);
+    context.SaveChanges();
+    return Results.Created($"/products {product.Id}", product.Id);
 });
 
 app.MapGet("/products/{code}", ([FromRoute] string code) => {
@@ -27,24 +39,8 @@ app.MapDelete("/products/{code}", ([FromRoute] string code) => {
     return Results.Ok();
 });
 
+app.MapGet("/configuration/database", (IConfiguration configuration) =>{
+    return Results.Ok(configuration["database:connection"]);
+});
+
 app.Run();
-
-public static class ProductRepository{
-    public static List<Product> Products { get; set; } 
-    public static void Add(Product product){
-        if(Products == null)
-            Products = new List<Product>();
-        Products.Add(product);
-    }
-    public static Product GetBy(string code){
-        return Products.FirstOrDefault(p => p.Code == code);
-    }
-    public static void Remove(Product product){
-        Products.Remove(product);
-    }
-}
-
-public class Product{
-    public string Code { get; set; }
-    public string Name { get; set; }
-}
